@@ -3,7 +3,6 @@ import pdfplumber
 import re
 import pandas as pd
 from datetime import datetime
-import pyperclip
 import os
 
 st.set_page_config(page_title="Leitor de Remessas", layout="wide")
