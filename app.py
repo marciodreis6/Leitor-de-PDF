@@ -134,6 +134,9 @@ if arquivos:
         todos_dados.append(df)
 
     df_final = pd.concat(todos_dados, ignore_index=True)
+    
+    st.write(df_final.columns)
+    st.write(df_final)
 
     # Ordem correta das colunas
     df_final = df_final[[
