@@ -66,7 +66,7 @@ def processar_pdf(file):
             transportadora = " ".join(transportadora.split()[:3])
 
         # NFs
-        nnfs_brutas = re.findall(r'\b\d{6,}\b', bloco)
+        nfs_brutas = re.findall(r'\b\d{6,}\b', bloco)
 
             nfs = []
 
