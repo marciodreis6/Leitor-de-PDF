@@ -66,8 +66,18 @@ def processar_pdf(file):
             transportadora = " ".join(transportadora.split()[:3])
 
         # NFs
-        nfs = re.findall(r'\b(\d{6,})\b', bloco)
+        nnfs_brutas = re.findall(r'\b\d{6,}\b', bloco)
+
+         nfs = []
+
+            for nf in nfs_brutas:
+            nf_limpa = nf.lstrip("0")  # remove zeros da esquerda
+    
+            if nf_limpa.startswith("11") or nf_limpa.startswith("16"):
+                nfs.append(nf_limpa)
+
         nfs = sorted(set(nfs))
+        
         if not nfs:
             continue
 
