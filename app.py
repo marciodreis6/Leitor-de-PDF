@@ -56,7 +56,7 @@ def processar_pdf(file):
             continue
 
         # Remessa (mais tolerante)
-        remessa_match = re.search(r'N[ºo]?\s*Remessa:\s*0*(\d+)', bloco)
+        remessa_match = re.search(r'Remessa:\s*0*(\d+)', bloco)
         remessa = remessa_match.group(1) if remessa_match else ""
 
         # Transportadora
