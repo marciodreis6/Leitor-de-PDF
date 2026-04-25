@@ -70,7 +70,7 @@ def processar_pdf(file):
 
         nfs = []
 
-        for nf in nfs_brutas:
+            for nf in nfs_brutas:
             nf_limpa = nf.lstrip("0")  # remove zeros da esquerda
     
             if nf_limpa.startswith("11") or nf_limpa.startswith("16"):
