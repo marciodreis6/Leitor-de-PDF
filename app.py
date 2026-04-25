@@ -68,7 +68,7 @@ def processar_pdf(file):
         # NFs
         nnfs_brutas = re.findall(r'\b\d{6,}\b', bloco)
 
-        nfs = []
+            nfs = []
 
             for nf in nfs_brutas:
             nf_limpa = nf.lstrip("0")  # remove zeros da esquerda
