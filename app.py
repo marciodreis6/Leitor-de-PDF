@@ -90,8 +90,23 @@ def processar_pdf(file):
         valor = total.group(4) if total else ""
 
         # Cidade
-        cidade_match = re.search(r'Cidade:\s*(.*)', bloco)
-        cidade = cidade_match.group(1).strip() if cidade_match else ""
+        cidade_match = re.search(r'Cidade:\s*(.*?)(?:Informações|Total|$)', bloco, re.DOTALL)
+
+        if cidade_match:
+            texto_cidades = cidade_match.group(1)
+
+            linhas = texto_cidades.split("\n")
+
+            cidades = []
+
+            for linha in linhas:
+                nome = linha.strip()
+                if nome and not any(x in nome for x in ["Total", "NF", "Peso"]):
+                    cidades.append(nome)
+
+            cidade = "/".join(dict.fromkeys(cidades))  # remove duplicado mantendo ordem
+        else:
+            cidade = ""
 
         # ===== CLIENTE ROBUSTO =====
         clientes_encontrados = re.findall(
