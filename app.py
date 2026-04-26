@@ -29,7 +29,7 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📦 Leitor de Remessas (PDF → Excel)")
+st.title("📦 Leitor de Remessas (PDF → Cargas pendentes)")
 
 arquivos = st.file_uploader(
     "Envie os PDFs",
