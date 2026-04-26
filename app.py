@@ -38,6 +38,25 @@ arquivos = st.file_uploader(
 )
 
 # ===== PROCESSAMENTO =====
+def limpar_nome(nome):
+    import re
+
+    # remove quebras e espaços duplicados
+    nome = nome.replace("\n", " ")
+    nome = re.sub(r'\s+', ' ', nome).strip()
+
+    # remove números no FINAL
+    nome = re.sub(r'\s*\d+$', '', nome)
+
+    palavras = nome.split()
+
+    palavras_filtradas = [
+        p for p in palavras
+        if len(p) > 2 or p.upper() == "M"
+    ]
+
+    return " ".join(palavras_filtradas)
+
 def processar_pdf(file):
     texto = ""
     with pdfplumber.open(file) as pdf:
@@ -63,7 +82,8 @@ def processar_pdf(file):
         transp = re.search(r'Transportador[a]?:\s*(.*?)\s+Impresso', bloco)
         transportadora = transp.group(1).strip() if transp else ""
         if transportadora:
-            transportadora = " ".join(transportadora.split()[:3])
+                    transportadora = limpar_nome(transportadora)
+                    transportadora = " ".join(transportadora.split()[:3])
 
         # NFs
         nfs_brutas = re.findall(r'\b\d{6,}\b', bloco)
@@ -118,6 +138,7 @@ def processar_pdf(file):
         for c in clientes_encontrados:
             nome = c.replace("\n", " ")
             nome = re.sub(r'\s+', ' ', nome).strip()
+            nome = limpar_nome(nome)
             nome = " ".join(nome.split()[:3])
             clientes_formatados.append(nome)
 
