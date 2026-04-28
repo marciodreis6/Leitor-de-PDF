@@ -31,6 +31,8 @@ st.markdown(f"""
 
 st.title("📦 Leitor de Remessas (PDF → Cargas pendentes)")
 
+st.divider()
+
 col_esq, col_dir = st.columns([2,6])
 
 with col_esq:
