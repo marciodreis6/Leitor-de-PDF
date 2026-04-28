@@ -31,11 +31,16 @@ st.markdown(f"""
 
 st.title("📦 Leitor de Remessas (PDF → Cargas pendentes)")
 
-arquivos = st.file_uploader(
-    "Envie os PDFs",
-    type="pdf",
-    accept_multiple_files=True
-)
+col_esq, col_dir = st.columns([2,6])
+
+with col_esq:
+    arquivos = st.file_uploader(
+        "Envie os PDFs",
+        type="pdf",
+        accept_multiple_files=True
+    )
+
+    msg_box = st.empty()  # 👈 ESSENCIAL
 
 # ===== PROCESSAMENTO =====
 def limpar_nome(nome):
@@ -205,8 +210,7 @@ if arquivos:
 
         df_final = df_final[colunas]
 
-        st.success(f"{len(df_final)} remessas processadas!")
-        
+        msg_box.success(f"{len(df_final)} remessas processadas!")
         col1, col2, col3 = st.columns(3)
 
         # Converter valores (trocar vírgula por ponto)
@@ -245,7 +249,7 @@ if arquivos:
         st.bar_chart(grafico)
 
     else:
-        st.warning("Nenhuma remessa válida encontrada 😅")
+        msg_box.warning("Nenhuma remessa válida 😅")
 
 else:
-    st.info("Envie um PDF pra começar")
+    msg_box.info("Envie um PDF pra começar")
