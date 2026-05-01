@@ -137,7 +137,7 @@ def processar_pdf(file):
 
         # ===== CLIENTE ROBUSTO =====
         clientes_encontrados = re.findall(
-            r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\s+([A-Z0-9\s\.\-&]+)',
+            r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\s+([A-Z\s\.\-&]+)',
             bloco
         )
 
