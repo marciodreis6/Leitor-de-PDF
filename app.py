@@ -16,54 +16,61 @@ def get_base64(file_path):
 img = get_base64("fundo.png")
 
 st.markdown(f"""
-    <style>
-    .stApp {{
-        background: linear-gradient(
-            rgba(0, 0, 0, 0.7), 
-            rgba(0, 0, 0, 0.7)
-        ),
-        url("data:image/png;base64,{img}");
-        background-size: cover;
-        background-position: center;
-    }}
-    </style>
+<style>
+.stApp {{
+    background: linear-gradient(
+        rgba(0, 0, 0, 0.7), 
+        rgba(0, 0, 0, 0.7)
+    ),
+    url("data:image/png;base64,{img}");
+    background-size: cover;
+    background-position: center;
+}}
+
+div[data-testid="stFileUploader"] {{
+    max-width: 300px;
+}}
+
+.bloco-pequeno {{
+    max-width: 300px;
+}}
+</style>
 """, unsafe_allow_html=True)
 
-st.title("📦 Leitor de Remessas (PDF → Cargas pendentes)")
+st.title("📦 Leitor de Remessas")
 
-st.divider()
+arquivos = st.file_uploader(
+    "Envie os PDFs",
+    type="pdf",
+    accept_multiple_files=True
+)
 
-col_esq, col_dir = st.columns([2,6])
-
-with col_esq:
-    arquivos = st.file_uploader(
-        "Envie os PDFs",
-        type="pdf",
-        accept_multiple_files=True
-    )
-
-    msg_box = st.empty()  # 👈 ESSENCIAL
-
-# ===== PROCESSAMENTO =====
+# ===== LIMPEZA DE NOME =====
 def limpar_nome(nome):
-    import re
-
-    # remove quebras e espaços duplicados
     nome = nome.replace("\n", " ")
     nome = re.sub(r'\s+', ' ', nome).strip()
 
-    # remove números no FINAL
-    nome = re.sub(r'\s*\d+$', '', nome)
-
     palavras = nome.split()
+    palavras_filtradas = []
 
-    palavras_filtradas = [
-        p for p in palavras
-        if len(p) > 2 or p.upper() == "M"
-    ]
+    for p in palavras:
 
-    return " ".join(palavras_filtradas)
+        # remove qualquer palavra com número
+        if any(char.isdigit() for char in p):
+            continue
 
+        # mantém só palavras válidas
+        if re.match(r'^[A-Za-zÀ-ÿ&.-]+$', p):
+            palavras_filtradas.append(p)
+
+    # remove preposição SOMENTE se estiver no final
+    preposicoes = {"DE", "DA", "DO", "DOS", "DAS"}
+    if palavras_filtradas and palavras_filtradas[-1].upper() in preposicoes:
+        palavras_filtradas.pop()
+
+    return " ".join(palavras_filtradas).strip()
+
+# ===== PROCESSAMENTO =====
 def processar_pdf(file):
     texto = ""
     with pdfplumber.open(file) as pdf:
@@ -81,71 +88,57 @@ def processar_pdf(file):
         if not re.search(r'Remessa', bloco, re.IGNORECASE):
             continue
 
-        # Remessa (mais tolerante)
+        # UNIDADE
+        unidade = ""
+        if "M432" in bloco:
+            unidade = "M432"
+        elif "M031" in bloco or "ARATU" in bloco.upper():
+            unidade = "M031"
+
+        # REMESSA
         remessa_match = re.search(r'Remessa:\s*0*(\d+)', bloco)
         remessa = remessa_match.group(1) if remessa_match else ""
 
-        # Transportadora
+        # TRANSPORTADORA
         transp = re.search(r'Transportador[a]?:\s*(.*?)\s+Impresso', bloco)
-        transportadora = transp.group(1).strip() if transp else ""
-        if transportadora:
-                    transportadora = limpar_nome(transportadora)
-                    transportadora = " ".join(transportadora.split()[:3])
+        transportadora = limpar_nome(transp.group(1)) if transp else ""
+        transportadora = " ".join(transportadora.split()[:3])
 
         # NFs
         nfs_brutas = re.findall(r'\b\d{6,}\b', bloco)
-
         nfs = []
 
         for nf in nfs_brutas:
-            nf_limpa = nf.lstrip("0")  # remove zeros da esquerda
-    
+            nf_limpa = nf.lstrip("0")
             if nf_limpa.startswith("11") or nf_limpa.startswith("16"):
                 nfs.append(nf_limpa)
 
         nfs = sorted(set(nfs))
-        
         if not nfs:
             continue
 
         nf = f"{nfs[0]} a {nfs[-1]}" if len(nfs) > 1 else nfs[0]
 
-        # Totais
+        # TOTAIS
         total = re.search(r'Total Geral:\s*(\d+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)', bloco)
         volume = total.group(1) if total else ""
-        peso_b = total.group(3) if total else ""
+        peso = total.group(3) if total else ""
         valor = total.group(4) if total else ""
 
-        # Cidade
+        # CIDADE
         cidade_match = re.search(r'Cidade:\s*(.*?)(?:Informações|Total|$)', bloco, re.DOTALL)
-
+        cidade = ""
         if cidade_match:
-            texto_cidades = cidade_match.group(1)
+            linhas = cidade_match.group(1).split("\n")
+            cidades = [l.strip() for l in linhas if l.strip()]
+            cidade = "/".join(dict.fromkeys(cidades))
 
-            linhas = texto_cidades.split("\n")
-
-            cidades = []
-
-            for linha in linhas:
-                nome = linha.strip()
-                if nome and not any(x in nome for x in ["Total", "NF", "Peso"]):
-                    cidades.append(nome)
-
-            cidade = "/".join(dict.fromkeys(cidades))  # remove duplicado mantendo ordem
-        else:
-            cidade = ""
-
-        # ===== CLIENTE ROBUSTO =====
-        clientes_encontrados = re.findall(
-            r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\s+([A-Z\s\.\-&]+)',
-            bloco
-        )
+        # CLIENTE
+        clientes = re.findall(r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\s+([A-Z0-9\s\.\-&]+)', bloco)
 
         clientes_formatados = []
-        for c in clientes_encontrados:
-            nome = c.replace("\n", " ")
-            nome = re.sub(r'\s+', ' ', nome).strip()
-            nome = limpar_nome(nome)
+        for c in clientes:
+            nome = limpar_nome(c)
             nome = " ".join(nome.split()[:3])
             clientes_formatados.append(nome)
 
@@ -158,14 +151,30 @@ def processar_pdf(file):
         else:
             cliente = ""
 
-        # Adiciona linha
+        # ===== TIPO DE SERVIÇO =====
+        cidade_up = cidade.upper()
+        cliente_up = cliente.upper()
+        transp_up = transportadora.upper()
+
+        if "DUBAI" in cidade_up or "MIAMI" in cidade_up:
+            tipo = "EXPORTAÇÃO"
+        elif cliente_up == transp_up:
+            if "MDIAS" in cliente_up:
+                tipo = "TRANSFERENCIA"
+            else:
+                tipo = "FOB"
+        else:
+            tipo = "CIF"
+
         dados.append({
+            "UNIDADE": unidade,
+            "TIPO DE SERVIÇO": tipo,
             "PRÉ-FAT": "PRÉ-FAT",
             "REMESSA": remessa,
             "TRANSPORTADORA": transportadora,
             "SEGMENTO": "",
             "NOVA AGENDA": "",
-            "PESO": peso_b,
+            "PESO": peso,
             "VALOR": valor,
             "VOLUME": volume,
             "CLIENTE": cliente,
@@ -179,79 +188,58 @@ def processar_pdf(file):
 
 # ===== EXECUÇÃO =====
 if arquivos:
-    todos_dados = []
+    todos = [processar_pdf(a) for a in arquivos]
+    df_final = pd.concat(todos, ignore_index=True)
 
-    for arquivo in arquivos:
-        df = processar_pdf(arquivo)
-        todos_dados.append(df)
-
-    df_final = pd.concat(todos_dados, ignore_index=True)
-    # normaliza
-    df_final["CLIENTE"] = df_final["CLIENTE"].fillna("")
-
-    # separa
-    df_normais = df_final[df_final["CLIENTE"].str.strip().str.upper() != "DIVERSOS"]
-    df_diversos = df_final[df_final["CLIENTE"].str.strip().str.upper() == "DIVERSOS"]
-
-    # ordena só os normais
-    df_normais = df_normais.sort_values(by="CLIENTE", key=lambda x: x.str.upper())
-
-    # junta tudo com DIVERSOS no final
-    df_final = pd.concat([df_normais, df_diversos], ignore_index=True)
     if not df_final.empty:
 
-        # Ordena por cliente
-        df_final = df_final.sort_values(by="CLIENTE").reset_index(drop=True)
+        # NÃO MISTURAR UNIDADE
+        if df_final["UNIDADE"].nunique() > 1:
+            st.error("Mistura de unidades detectada 🚨")
 
-        # Ordem das colunas
-        colunas = [
-            "PRÉ-FAT", "REMESSA", "TRANSPORTADORA", "SEGMENTO",
-            "NOVA AGENDA", "PESO", "VALOR", "VOLUME",
-            "CLIENTE", "LOCAL DE ENTREGA", "NF", "DATA", "HORA"
-        ]
+        unidade_final = df_final["UNIDADE"].iloc[0]
 
-        df_final = df_final[colunas]
+        # ordenar clientes (DIVERSOS no final)
+        df_final["CLIENTE"] = df_final["CLIENTE"].fillna("")
+        df_normais = df_final[df_final["CLIENTE"].str.upper() != "DIVERSOS"]
+        df_diversos = df_final[df_final["CLIENTE"].str.upper() == "DIVERSOS"]
 
-        msg_box.success(f"{len(df_final)} remessas processadas!")
-        col1, col2, col3 = st.columns(3)
+        df_normais = df_normais.sort_values(by="CLIENTE", key=lambda x: x.str.upper())
+        df_final = pd.concat([df_normais, df_diversos], ignore_index=True)
 
-        # Converter valores (trocar vírgula por ponto)
-        df_calc = df_final.copy()
-        df_calc["VALOR"] = df_calc["VALOR"].str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
-        df_calc["PESO"] = df_calc["PESO"].str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
+        # LAYOUT
+        if unidade_final == "M031":
+            df_final = df_final[[
+                "TIPO DE SERVIÇO",
+                "REMESSA",
+                "TRANSPORTADORA",
+                "PESO",
+                "VALOR",
+                "CLIENTE",
+                "LOCAL DE ENTREGA",
+                "NF",
+                "DATA"
+            ]]
+        else:
+            df_final = df_final[[
+                "PRÉ-FAT", "REMESSA", "TRANSPORTADORA",
+                "SEGMENTO", "NOVA AGENDA", "PESO",
+                "VALOR", "VOLUME", "CLIENTE",
+                "LOCAL DE ENTREGA", "NF", "DATA", "HORA"
+            ]]
 
-        with col1:
-            st.metric("📦 Remessas", len(df_final))
+        st.success(f"{len(df_final)} remessas processadas!")
 
-        with col2:
-            st.metric("💰 Valor Total", f"R$ {df_calc['VALOR'].sum():,.2f}")
-
-        with col3:
-            st.metric("⚖️ Peso Total", f"{df_calc['PESO'].sum():,.2f} kg")
-        
         st.dataframe(df_final, use_container_width=True)
 
-        nome = f"prefat_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
+        nome = f"{unidade_final}_prefat_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
         df_final.to_excel(nome, index=False)
 
         with open(nome, "rb") as f:
             st.download_button("📥 Baixar Excel", f, file_name=nome)
 
-        # Copiar só no Windows
-        if os.name == "nt":
-            import pyperclip
-            if st.button("📋 Copiar dados"):
-                texto = df_final.to_csv(sep="\t", index=False, header=False)
-                pyperclip.copy(texto)
-                st.success("Copiado! Só colar 😎")
-                st.subheader("📊 Valor por Cliente")
-
-        grafico = df_calc.groupby("CLIENTE")["VALOR"].sum().sort_values(ascending=False)
-
-        st.bar_chart(grafico)
-
     else:
-        msg_box.warning("Nenhuma remessa válida 😅")
+        st.warning("Nenhuma remessa válida encontrada 😅")
 
 else:
-    msg_box.info("Envie um PDF pra começar")
+    st.info("Envie um PDF pra começar")
