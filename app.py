@@ -42,29 +42,40 @@ with col_esq:
         accept_multiple_files=True
     )
 
-    msg_box = st.empty()  # 👈 ESSENCIAL
+    msg_box = st.empty()
     st.divider()
 
-# ===== PROCESSAMENTO =====
+# ===== LIMPEZA =====
 def limpar_nome(nome):
-    import re
-
-    # remove quebras e espaços duplicados
     nome = nome.replace("\n", " ")
     nome = re.sub(r'\s+', ' ', nome).strip()
 
-    # remove números no FINAL
+    # remove números no final
     nome = re.sub(r'\s*\d+$', '', nome)
 
     palavras = nome.split()
 
-    palavras_filtradas = [
-        p for p in palavras
-        if len(p) > 2 or p.upper() == "M"
-    ]
+    palavras_filtradas = []
+
+    for i, p in enumerate(palavras):
+
+        # mantém palavras normais
+        if len(p) > 3:
+            palavras_filtradas.append(p)
+
+        # mantém siglas pequenas SOMENTE no início
+        elif i == 0 and len(p) in [1, 2, 3]:
+            palavras_filtradas.append(p)
 
     return " ".join(palavras_filtradas)
 
+# ===== MAPA EXPORTAÇÃO =====
+mapa_exportacao = {
+    "J W SOLUCOES INTEGRADAS": "WADI BAILOOL GENERAL TRADING CO.",
+    "MMA": "TRANSNATIONAL FOODS"
+}
+
+# ===== PROCESSAMENTO =====
 def processar_pdf(file):
     texto = ""
     with pdfplumber.open(file) as pdf:
@@ -82,71 +93,66 @@ def processar_pdf(file):
         if not re.search(r'Remessa', bloco, re.IGNORECASE):
             continue
 
-        # Remessa (mais tolerante)
+        # REMESSA
         remessa_match = re.search(r'Remessa:\s*0*(\d+)', bloco)
         remessa = remessa_match.group(1) if remessa_match else ""
 
-        # Transportadora
+        # TRANSPORTADORA
         transp = re.search(r'Transportador[a]?:\s*(.*?)\s+Impresso', bloco)
         transportadora = transp.group(1).strip() if transp else ""
+
         if transportadora:
-                    transportadora = limpar_nome(transportadora)
-                    transportadora = " ".join(transportadora.split()[:3])
+            transportadora = limpar_nome(transportadora)
+            transportadora = " ".join(transportadora.split()[:4])  # aumentei pra garantir match
 
         # NFs
         nfs_brutas = re.findall(r'\b\d{6,}\b', bloco)
 
         nfs = []
-
         for nf in nfs_brutas:
-            nf_limpa = nf.lstrip("0")  # remove zeros da esquerda
-    
+            nf_limpa = nf.lstrip("0")
             if nf_limpa.startswith("11") or nf_limpa.startswith("16"):
                 nfs.append(nf_limpa)
 
         nfs = sorted(set(nfs))
-        
         if not nfs:
             continue
 
         nf = f"{nfs[0]} a {nfs[-1]}" if len(nfs) > 1 else nfs[0]
 
-        # Totais
+        # TOTAIS
         total = re.search(r'Total Geral:\s*(\d+)\s+([\d.,]+)\s+([\d.,]+)\s+([\d.,]+)', bloco)
         volume = total.group(1) if total else ""
         peso_b = total.group(3) if total else ""
         valor = total.group(4) if total else ""
 
-        # Cidade
+        # CIDADE
         cidade_match = re.search(r'Cidade:\s*(.*?)(?:Informações|Total|$)', bloco, re.DOTALL)
+        cidade = ""
 
         if cidade_match:
-            texto_cidades = cidade_match.group(1)
+            linhas = cidade_match.group(1).split("\n")
+            cidades = [l.strip() for l in linhas if l.strip()]
+            cidade = "/".join(dict.fromkeys(cidades))
 
-            linhas = texto_cidades.split("\n")
-
-            cidades = []
-
-            for linha in linhas:
-                nome = linha.strip()
-                if nome and not any(x in nome for x in ["Total", "NF", "Peso"]):
-                    cidades.append(nome)
-
-            cidade = "/".join(dict.fromkeys(cidades))  # remove duplicado mantendo ordem
-        else:
-            cidade = ""
-
-        # ===== CLIENTE ROBUSTO =====
+        # ===== CLIENTE NORMAL =====
         clientes_encontrados = re.findall(
-            r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\s+([A-Z0-9\s\.\-&]+)',
+            r'\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\s+(.+?)(?:\n\s*\n|\d{1,3},\d{3})',
             bloco
         )
 
         clientes_formatados = []
         for c in clientes_encontrados:
-            nome = c.replace("\n", " ")
-            nome = re.sub(r'\s+', ' ', nome).strip()
-            nome = limpar_nome(nome)
+            nome = limpar_nome(c)
+            # remove qualquer palavra que tenha número
+            palavras = nome.split()
+
+            palavras = [
+                p for p in palavras
+                if not any(char.isdigit() for char in p)
+            ]
+
+            nome = " ".join(palavras)
             nome = " ".join(nome.split()[:3])
             clientes_formatados.append(nome)
 
@@ -159,7 +165,15 @@ def processar_pdf(file):
         else:
             cliente = ""
 
-        # Adiciona linha
+        # ===== REGRA EXPORTAÇÃO (AQUI ESTÁ O OURO) =====
+        transp_upper = transportadora.upper()
+
+        for chave, cliente_fixo in mapa_exportacao.items():
+            if chave in transp_upper:
+                cliente = cliente_fixo
+                break
+
+        # ===== SALVA =====
         dados.append({
             "PRÉ-FAT": "PRÉ-FAT",
             "REMESSA": remessa,
@@ -180,43 +194,25 @@ def processar_pdf(file):
 
 # ===== EXECUÇÃO =====
 if arquivos:
-    todos_dados = []
-
-    for arquivo in arquivos:
-        df = processar_pdf(arquivo)
-        todos_dados.append(df)
-
+    todos_dados = [processar_pdf(a) for a in arquivos]
     df_final = pd.concat(todos_dados, ignore_index=True)
-    # normaliza
+
     df_final["CLIENTE"] = df_final["CLIENTE"].fillna("")
 
-    # separa
-    df_normais = df_final[df_final["CLIENTE"].str.strip().str.upper() != "DIVERSOS"]
-    df_diversos = df_final[df_final["CLIENTE"].str.strip().str.upper() == "DIVERSOS"]
+    df_normais = df_final[df_final["CLIENTE"].str.upper() != "DIVERSOS"]
+    df_diversos = df_final[df_final["CLIENTE"].str.upper() == "DIVERSOS"]
 
-    # ordena só os normais
     df_normais = df_normais.sort_values(by="CLIENTE", key=lambda x: x.str.upper())
-
-    # junta tudo com DIVERSOS no final
     df_final = pd.concat([df_normais, df_diversos], ignore_index=True)
+
     if not df_final.empty:
 
-        # Ordena por cliente
         df_final = df_final.sort_values(by="CLIENTE").reset_index(drop=True)
 
-        # Ordem das colunas
-        colunas = [
-            "PRÉ-FAT", "REMESSA", "TRANSPORTADORA", "SEGMENTO",
-            "NOVA AGENDA", "PESO", "VALOR", "VOLUME",
-            "CLIENTE", "LOCAL DE ENTREGA", "NF", "DATA", "HORA"
-        ]
-
-        df_final = df_final[colunas]
-
         msg_box.success(f"{len(df_final)} remessas processadas!")
+
         col1, col2, col3 = st.columns(3)
 
-        # Converter valores (trocar vírgula por ponto)
         df_calc = df_final.copy()
         df_calc["VALOR"] = df_calc["VALOR"].str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
         df_calc["PESO"] = df_calc["PESO"].str.replace(".", "", regex=False).str.replace(",", ".", regex=False).astype(float)
@@ -229,7 +225,7 @@ if arquivos:
 
         with col3:
             st.metric("⚖️ Peso Total", f"{df_calc['PESO'].sum():,.2f} kg")
-        
+
         st.dataframe(df_final, use_container_width=True)
 
         nome = f"prefat_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
@@ -237,19 +233,6 @@ if arquivos:
 
         with open(nome, "rb") as f:
             st.download_button("📥 Baixar Excel", f, file_name=nome)
-
-        # Copiar só no Windows
-        if os.name == "nt":
-            import pyperclip
-            if st.button("📋 Copiar dados"):
-                texto = df_final.to_csv(sep="\t", index=False, header=False)
-                pyperclip.copy(texto)
-                st.success("Copiado! Só colar 😎")
-                st.subheader("📊 Valor por Cliente")
-
-        grafico = df_calc.groupby("CLIENTE")["VALOR"].sum().sort_values(ascending=False)
-
-        st.bar_chart(grafico)
 
     else:
         msg_box.warning("Nenhuma remessa válida 😅")
