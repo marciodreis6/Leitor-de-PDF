@@ -238,7 +238,7 @@ if arquivos:
         df_final.to_excel(nome, index=False)
 
         with open(nome, "rb") as f:
-            st.download_button("📥 Baixar Excel", f, file_name=nome)
+            st.download_button("📥 Baixar planilha", f, file_name=nome)
 
     else:
         msg_box.warning("Nenhuma remessa válida 😅")
