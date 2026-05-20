@@ -5,6 +5,7 @@ import pandas as pd
 from datetime import datetime
 import os
 import base64
+from zoneinfo import ZoneInfo
 
 st.set_page_config(page_title="Leitor de Remessas", layout="wide")
 
@@ -29,11 +30,13 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("📦 Leitor de Remessas (PDF → Cargas pendentes)")
+st.title("📦 Leitor de Remessas")
+st.markdown("### PDF → Cargas Pendentes")
+st.caption("Faturamento - 432")
 
 st.divider()
 
-col_esq, col_dir = st.columns([2,6])
+col_esq, col_dir = st.columns([1,8])
 
 with col_esq:
     arquivos = st.file_uploader(
@@ -85,7 +88,7 @@ def processar_pdf(file):
     blocos = re.split(r'Relat[oó]rio de Manifesto de Carga', texto, flags=re.IGNORECASE)
     dados = []
 
-    agora = datetime.now()
+    agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
     data = agora.strftime("%d/%m/%Y")
     hora = agora.strftime("%H:%M:%S")
 
@@ -227,6 +230,9 @@ if arquivos:
             st.metric("⚖️ Peso Total", f"{df_calc['PESO'].sum():,.2f} kg")
 
         st.dataframe(df_final, use_container_width=True)
+        
+        df_final["DATA"] = df_final["DATA"].astype(str)
+        df_final["HORA"] = df_final["HORA"].astype(str)
 
         nome = f"prefat_{datetime.now().strftime('%d-%m-%Y')}.xlsx"
         df_final.to_excel(nome, index=False)
