@@ -40,7 +40,7 @@ col_esq, col_dir = st.columns([1,8])
 
 with col_esq:
     arquivos = st.file_uploader(
-        "Envie os PDFs",
+        "Envie os relatórios em PDFs",
         type="pdf",
         accept_multiple_files=True
     )
