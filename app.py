@@ -114,7 +114,7 @@ def processar_pdf(file):
         nfs = []
         for nf in nfs_brutas:
             nf_limpa = nf.lstrip("0")
-            if nf_limpa.startswith("11") or nf_limpa.startswith("16"):
+            if nf_limpa.startswith(("11", "12", "16")):
                 nfs.append(nf_limpa)
 
         nfs = sorted(set(nfs))
